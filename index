@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pencoblosan Digital</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #111; color: #fff; }
+    
+    /* Scanner Layar Penuh */
+    #cam {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      z-index: 1;
+    }
+    #scanUI {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 30px 16px;
+    }
+    .bingkai {
+      width: min(70vw, 300px);
+      height: min(70vw, 300px);
+      border: 4px solid #fff;
+      border-radius: 16px;
+      box-shadow: 0 0 0 100vmax rgba(0,0,0,0.5);
+    }
+    .status {
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+      background: rgba(0,0,0,0.7);
+      padding: 10px 20px;
+      border-radius: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="cam" playsinline muted></video>
+
+  <div id="scanUI">
+    <div class="status">Arahkan Barcode ke Kamera</div>
+    <div class="bingkai"></div>
+    <div class="status" id="pesan">Membuka kamera...</div>
+  </div>
+
+  <script>
+    // MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI SINI
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxzA0aRgTdVYBmBJc8QTKgVaEz7GkVKcwkbsp-kk1fQTmLagBgIEtsrwQ9olYaJ2y-o/exec";
+
+    let camStream = null;
+    let scanning = true;
+
+    // Kamera terbuka OTOMATIS saat halaman selesai dimuat
+    window.addEventListener('DOMContentLoaded', async () => {
+      await mulaiKameraOtomatis();
+    });
+
+    async function mulaiKameraOtomatis() {
+      const v = document.getElementById('cam');
+      const pesan = document.getElementById('pesan');
+
+      try {
+        // Membuka kamera belakang langsung tanpa butuh klik tombol
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+
+        v.srcObject = camStream;
+        await v.play();
+        pesan.innerText = "Kamera aktif. Silakan scan barcode.";
+        
+        mulaiScanLoop(v);
+
+      } catch (err) {
+        console.error("Gagal buka kamera:", err);
+        pesan.innerText = "Kamera tidak dapat diakses. Pastikan izin kamera telah diberikan.";
+      }
+    }
+
+    function mulaiScanLoop(video) {
+      const cv = document.createElement('canvas');
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+
+      const loop = () => {
+        if (!scanning) return;
+
+        if (video.readyState >= 2) {
+          cv.width = video.videoWidth;
+          cv.height = video.videoHeight;
+          cx.drawImage(video, 0, 0);
+
+          const imgData = cx.getImageData(0, 0, cv.width, cv.height);
+          const qr = jsQR(imgData.data, imgData.width, imgData.height);
+
+          if (qr && qr.data) {
+            scanning = false;
+            hentikanKamera();
+            prosesHasilScan(qr.data);
+            return;
+          }
+        }
+        setTimeout(loop, 150);
+      };
+      loop();
+    }
+
+    function hentikanKamera() {
+      if (camStream) {
+        camStream.getTracks().forEach(track => track.stop());
+      }
+    }
+
+    function prosesHasilScan(teks) {
+      document.getElementById('pesan').innerText = "Barcode terbaca! Memproses...";
+      
+      // Ambil parameter token jika hasil scan berupa URL, atau pakai teks langsung
+      const match = teks.match(/[?&]token=([^&#\s]+)/i);
+      const token = match ? match[1] : teks;
+
+      // Alihkan ke Web App Apps Script dengan membawa parameter token
+      window.location.href = `${APPS_SCRIPT_URL}?token=${encodeURIComponent(token)}`;
+    }
+  </script>
+</body>
+</html>
+
